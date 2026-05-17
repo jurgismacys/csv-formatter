@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}CSV Formatter{% endblock %}
+{% block content %}
+<section class="hero">
+  <h1>CSV Formatter</h1>
+  <p class="lede">Pick a source to format.</p>
+  <div class="card-grid">
+    <a class="card" href="{{ url_for('paypal') }}">
+      <h2>Format PayPal docs</h2>
+      <p>All transactions · Customer payments only</p>
+    </a>
+    <a class="card" href="{{ url_for('airwallex') }}">
+      <h2>Format Airwallex docs</h2>
+      <p>Transactions · Frozen funds (Užšaldytos)</p>
+    </a>
+  </div>
+</section>
+{% endblock %}

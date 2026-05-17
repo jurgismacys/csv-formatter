@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ vendor }} formatters{% endblock %}
+{% block content %}
+<section>
+  <h1>{{ vendor }}</h1>
+  <p class="lede">Choose a formatter.</p>
+  <div class="card-grid">
+    {% for key, cfg in items.items() %}
+    <a class="card" href="{{ url_for('run', key=key) }}">
+      <h2>{{ cfg.title.split('—', 1)[1].strip() }}</h2>
+      <p>{{ cfg.description }}</p>
+    </a>
+    {% endfor %}
+  </div>
+  <p><a class="back" href="{{ url_for('index') }}">← Back</a></p>
+</section>
+{% endblock %}

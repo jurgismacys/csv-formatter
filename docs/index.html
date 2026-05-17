@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CSV Formatter</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <a class="brand" href="#/">CSV Formatter</a>
+    <nav>
+      <a href="#/paypal">PayPal</a>
+      <a href="#/airwallex">Airwallex</a>
+    </nav>
+    <span class="status" id="status">Loading Python…</span>
+  </header>
+  <main id="view"></main>
+
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.DS_Store
+.settlement_prefs.json
+.settlement_split_prefs.json
+.all_transactions_prefs.json
+.customer_payments_prefs.json

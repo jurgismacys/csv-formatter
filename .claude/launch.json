@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "formatter-static",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8000", "--directory", "/Users/jurgismacys/Documents/Scripts/formatter-web/docs"],
+      "port": 8000
+    }
+  ]
+}

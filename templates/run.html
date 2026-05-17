@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ cfg.title }}{% endblock %}
+{% block content %}
+<section>
+  <h1>{{ cfg.title }}</h1>
+  <p class="lede">{{ cfg.description }}</p>
+
+  {% if error %}
+  <div class="error">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data" class="run-form">
+    <label class="field">
+      <span>CSV file(s)</span>
+      <input type="file" name="files" accept=".csv" multiple required>
+      <small>You can select multiple files.</small>
+    </label>
+
+    {% for m in cfg.months %}
+    <label class="field">
+      <span>{{ cfg.month_labels[m] }}</span>
+      <input type="number" name="{{ m }}" min="1" max="12" required>
+    </label>
+    {% endfor %}
+
+    <div class="actions">
+      <button type="submit">Format &amp; download</button>
+      <a class="back" href="{{ url_for(cfg.vendor) }}">← Back</a>
+    </div>
+  </form>
+</section>
+{% endblock %}
