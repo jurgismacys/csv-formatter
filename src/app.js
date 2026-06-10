@@ -70,33 +70,33 @@ outputs, errors = paypal_customer.run_batch(file_paths, ${p.month}, out_dir)
 `,
   },
   "gisko-sales": {
-    title: "Gisko — Pardavimų ataskaita",
+    title: "Gisko — Sales Report",
     vendor: "gisko",
     backHref: "#/",
     description:
-      "Sujungia Shopify Orders + Transaction histories eksportus į formatuotą Excel su mokėjimo būdų išskaidymu (mišrūs apmokėjimai pažymimi geltonai, grąžinimai raudonai).",
+      "Merges Shopify Orders + Transaction histories exports into a formatted Excel report with per-payment-method amount splits (mixed payments highlighted yellow, refunds/cancellations red). The output report is in Lithuanian.",
     module: "gisko_sales",
     output: "xlsx",
     fileFields: [
       {
         key: "orders",
-        label: "Shopify Orders eksportas (CSV)",
+        label: "Shopify Orders export (CSV)",
         accept: ".csv",
         multiple: false,
-        hint: "Admin → Orders → Export → „Export orders“",
+        hint: "Admin → Orders → Export → “Export orders”",
       },
       {
         key: "transactions",
-        label: "Shopify Transaction histories eksportas (CSV)",
+        label: "Shopify Transaction histories export (CSV)",
         accept: ".csv",
         multiple: false,
-        hint: "Admin → Orders → Export → „Export transaction histories“",
+        hint: "Admin → Orders → Export → “Export transaction histories”",
       },
     ],
     params: [
       {
         key: "period",
-        label: "Laikotarpis (nebūtina, pvz. 2026-05)",
+        label: "Period (optional, e.g. 2026-05)",
         type: "text",
         required: false,
         placeholder: "2026-05",
