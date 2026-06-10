@@ -21,6 +21,7 @@ MODULE_FILES = [
     "airwallex_frozen",
     "paypal_all",
     "paypal_customer",
+    "gisko_sales",
 ]
 
 # --- read source assets -----------------------------------------------------

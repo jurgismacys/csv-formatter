@@ -12,6 +12,7 @@ The published site is a single AES-256-encrypted page (via [StatiCrypt](https://
 - **PayPal — Customer Payments Only**: same as above but only Express Checkout Payment rows.
 - **Airwallex — Transactions**: splits settlement CSVs by currency and keeps Payment rows for the chosen month.
 - **Airwallex — Frozen Funds (Užšaldytos)**: keeps rows where Created month = X and Settled month = Y.
+- **Gisko — Pardavimų ataskaita**: takes **two** Shopify exports (Orders + Transaction histories) and outputs a formatted `.xlsx` with per-payment-method amount splits (mixed payments highlighted yellow, refunds/cancellations red, totals row). Two upload fields → one Excel file. Uses `openpyxl` (loaded in-browser via micropip).
 
 ## Structure
 

@@ -1,36 +1,115 @@
 "use strict";
 
+// Each formatter declares its inputs generically:
+//   fileFields: one or more upload fields (named, single or multiple)
+//   params:     scalar inputs (number or text)
+//   output:     "csv" | "xlsx"
+//   pyInvoke:   builds the Python that sets `outputs` (list of paths) + `errors`
 const FORMATTERS = {
   "airwallex-transactions": {
     title: "Airwallex — Transactions",
     vendor: "airwallex",
     description: "Splits settlement CSVs by currency and keeps Payment rows for the chosen month.",
     module: "airwallex_transactions",
-    months: [{ key: "month", label: "Month (1–12)" }],
+    output: "csv",
+    fileFields: [
+      { key: "files", label: "CSV file(s)", accept: ".csv", multiple: true, hint: "You can select multiple files." },
+    ],
+    params: [{ key: "month", label: "Month (1–12)", type: "number", min: 1, max: 12, required: true }],
+    pyInvoke: (f, p) => `
+file_paths = sorted(Path(x) for x in ${f.files})
+outputs, errors = airwallex_transactions.run_batch(file_paths, ${p.month}, out_dir)
+`,
   },
   "airwallex-frozen": {
     title: "Airwallex — Frozen Funds (Užšaldytos)",
     vendor: "airwallex",
     description: "Keeps rows where Created month = X and Settled month = Y.",
     module: "airwallex_frozen",
-    months: [
-      { key: "month_created", label: "Created month (1–12)" },
-      { key: "month_settled", label: "Settled month (1–12)" },
+    output: "csv",
+    fileFields: [
+      { key: "files", label: "CSV file(s)", accept: ".csv", multiple: true, hint: "You can select multiple files." },
     ],
+    params: [
+      { key: "month_created", label: "Created month (1–12)", type: "number", min: 1, max: 12, required: true },
+      { key: "month_settled", label: "Settled month (1–12)", type: "number", min: 1, max: 12, required: true },
+    ],
+    pyInvoke: (f, p) => `
+file_paths = sorted(Path(x) for x in ${f.files})
+outputs, errors = airwallex_frozen.run_batch(file_paths, ${p.month_created}, ${p.month_settled}, out_dir)
+`,
   },
   "paypal-all": {
     title: "PayPal — All Transactions",
     vendor: "paypal",
     description: "Converts CSR Date/Time to Europe/Vilnius and keeps the chosen LT month.",
     module: "paypal_all",
-    months: [{ key: "month", label: "LT month (1–12)" }],
+    output: "csv",
+    fileFields: [
+      { key: "files", label: "CSV file(s)", accept: ".csv", multiple: true, hint: "You can select multiple files." },
+    ],
+    params: [{ key: "month", label: "LT month (1–12)", type: "number", min: 1, max: 12, required: true }],
+    pyInvoke: (f, p) => `
+file_paths = sorted(Path(x) for x in ${f.files})
+outputs, errors = paypal_all.run_batch(file_paths, ${p.month}, out_dir)
+`,
   },
   "paypal-customer": {
     title: "PayPal — Customer Payments Only",
     vendor: "paypal",
     description: "Same as All Transactions, but only Express Checkout Payment rows.",
     module: "paypal_customer",
-    months: [{ key: "month", label: "LT month (1–12)" }],
+    output: "csv",
+    fileFields: [
+      { key: "files", label: "CSV file(s)", accept: ".csv", multiple: true, hint: "You can select multiple files." },
+    ],
+    params: [{ key: "month", label: "LT month (1–12)", type: "number", min: 1, max: 12, required: true }],
+    pyInvoke: (f, p) => `
+file_paths = sorted(Path(x) for x in ${f.files})
+outputs, errors = paypal_customer.run_batch(file_paths, ${p.month}, out_dir)
+`,
+  },
+  "gisko-sales": {
+    title: "Gisko — Pardavimų ataskaita",
+    vendor: "gisko",
+    backHref: "#/",
+    description:
+      "Sujungia Shopify Orders + Transaction histories eksportus į formatuotą Excel su mokėjimo būdų išskaidymu (mišrūs apmokėjimai pažymimi geltonai, grąžinimai raudonai).",
+    module: "gisko_sales",
+    output: "xlsx",
+    fileFields: [
+      {
+        key: "orders",
+        label: "Shopify Orders eksportas (CSV)",
+        accept: ".csv",
+        multiple: false,
+        hint: "Admin → Orders → Export → „Export orders“",
+      },
+      {
+        key: "transactions",
+        label: "Shopify Transaction histories eksportas (CSV)",
+        accept: ".csv",
+        multiple: false,
+        hint: "Admin → Orders → Export → „Export transaction histories“",
+      },
+    ],
+    params: [
+      {
+        key: "period",
+        label: "Laikotarpis (nebūtina, pvz. 2026-05)",
+        type: "text",
+        required: false,
+        placeholder: "2026-05",
+      },
+    ],
+    pyInvoke: (f, p) => `
+period = ${p.period}
+name = "Gisko_pardavimai_" + (period if period else "report") + ".xlsx"
+out_path = str(out_dir / name)
+gisko_sales.run(${f.orders}[0], ${f.transactions}[0], out_path, period)
+outputs = [out_path]
+errors = []
+`,
   },
 };
 
@@ -39,7 +118,10 @@ const MODULE_FILES = [
   "airwallex_frozen",
   "paypal_all",
   "paypal_customer",
+  "gisko_sales",
 ];
+
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 let pyodide = null;
 let pyodideReady = null;
@@ -60,15 +142,15 @@ async function initPyodide() {
   setStatus("Loading pandas…");
   await pyodide.loadPackage(["pandas", "micropip"]);
 
-  setStatus("Loading timezone data…");
+  setStatus("Loading timezone + Excel support…");
   await pyodide.runPythonAsync(`
 import micropip
-await micropip.install('tzdata')
+await micropip.install(['tzdata', 'openpyxl'])
 `);
 
   setStatus("Loading formatter scripts…");
   // Stub tkinter so the scripts' module-level imports succeed in the browser.
-  // The web UI doesn't call main()/Tk; only run_batch/run_one/run_split.
+  // The web UI doesn't call main()/Tk; only run_batch/run_one/run_split/run.
   await pyodide.runPython(`
 import sys, types
 for name in ['tkinter', 'tkinter.filedialog', 'tkinter.messagebox', 'tkinter.simpledialog']:
@@ -109,7 +191,7 @@ DatetimeProperties.strftime = _strftime_gnu
 import sys
 if '/scripts' not in sys.path:
     sys.path.insert(0, '/scripts')
-import airwallex_transactions, airwallex_frozen, paypal_all, paypal_customer
+import airwallex_transactions, airwallex_frozen, paypal_all, paypal_customer, gisko_sales
 `);
 
   setStatus("Ready", "ready");
@@ -186,6 +268,10 @@ function renderHome() {
       el("h2", {}, "Format Airwallex docs"),
       el("p", {}, "Transactions · Frozen funds (Užšaldytos)"),
     ),
+    el("a", { class: "card", href: "#/run/gisko-sales" },
+      el("h2", {}, "Gisko sales report"),
+      el("p", {}, "Shopify Orders + Transactions → formatted Excel"),
+    ),
   );
   root.append(grid);
   return root;
@@ -217,25 +303,44 @@ function renderRun(key) {
 
   const form = el("form", { class: "run-form" });
 
-  const fileLabel = el("label", { class: "field" });
-  fileLabel.append(
-    el("span", {}, "CSV file(s)"),
-    el("input", { type: "file", name: "files", accept: ".csv", multiple: "" }),
-    el("small", {}, "You can select multiple files."),
-  );
-  form.append(fileLabel);
-
-  for (const m of cfg.months) {
-    const lbl = el("label", { class: "field" });
-    lbl.append(
-      el("span", {}, m.label),
-      el("input", { type: "number", name: m.key, min: 1, max: 12, required: "" }),
+  for (const ff of cfg.fileFields) {
+    const fileLabel = el("label", { class: "field" });
+    fileLabel.append(
+      el("span", {}, ff.label),
+      el("input", {
+        type: "file",
+        name: ff.key,
+        accept: ff.accept || ".csv",
+        multiple: ff.multiple ? "" : false,
+      }),
+      ff.hint ? el("small", {}, ff.hint) : null,
     );
+    form.append(fileLabel);
+  }
+
+  for (const pr of cfg.params) {
+    const lbl = el("label", { class: "field" });
+    const input =
+      pr.type === "number"
+        ? el("input", {
+            type: "number",
+            name: pr.key,
+            min: pr.min,
+            max: pr.max,
+            required: pr.required ? "" : false,
+          })
+        : el("input", {
+            type: "text",
+            name: pr.key,
+            placeholder: pr.placeholder || "",
+            required: pr.required ? "" : false,
+          });
+    lbl.append(el("span", {}, pr.label), input);
     form.append(lbl);
   }
 
   const submit = el("button", { type: "submit" }, "Format & download");
-  const back = el("a", { class: "back", href: `#/${cfg.vendor}` }, "← Back");
+  const back = el("a", { class: "back", href: cfg.backHref || `#/${cfg.vendor}` }, "← Back");
   const actions = el("div", { class: "actions" }, submit, back);
   form.append(actions);
 
@@ -247,23 +352,42 @@ function renderRun(key) {
     message.className = "";
     message.textContent = "";
 
-    const fileInput = form.querySelector('input[type="file"]');
-    const files = fileInput.files;
-    if (!files || files.length === 0) {
+    const fail = (msg) => {
       message.className = "message error";
-      message.textContent = "Please select at least one CSV.";
-      return;
-    }
+      message.textContent = msg;
+    };
 
-    const months = {};
-    for (const m of cfg.months) {
-      const v = parseInt(form.querySelector(`input[name="${m.key}"]`).value, 10);
-      if (!(v >= 1 && v <= 12)) {
-        message.className = "message error";
-        message.textContent = `${m.label} must be 1–12.`;
+    // Collect files per field
+    const fieldFiles = {};
+    for (const ff of cfg.fileFields) {
+      const input = form.querySelector(`input[type="file"][name="${ff.key}"]`);
+      const files = Array.from(input.files || []);
+      if (files.length === 0) {
+        fail(`Please select a file: ${ff.label}`);
         return;
       }
-      months[m.key] = v;
+      fieldFiles[ff.key] = files;
+    }
+
+    // Collect + validate params
+    const params = {};
+    for (const pr of cfg.params) {
+      const input = form.querySelector(`[name="${pr.key}"]`);
+      if (pr.type === "number") {
+        const v = parseInt(input.value, 10);
+        if (pr.min != null && pr.max != null && !(v >= pr.min && v <= pr.max)) {
+          fail(`${pr.label} must be ${pr.min}–${pr.max}.`);
+          return;
+        }
+        params[pr.key] = v;
+      } else {
+        const v = (input.value || "").trim();
+        if (pr.required && !v) {
+          fail(`${pr.label} is required.`);
+          return;
+        }
+        params[pr.key] = v;
+      }
     }
 
     submit.disabled = true;
@@ -273,12 +397,12 @@ function renderRun(key) {
     try {
       await startPyodide();
       message.textContent = "Processing…";
-      const result = await runFormatter(key, Array.from(files), months);
+      const result = await runFormatter(key, fieldFiles, params);
       if (result.errors.length > 0 && result.outputs.length === 0) {
         message.className = "message error";
-        message.textContent = "No output rows matched.\n" + result.errors.join("\n");
+        message.textContent = "No output produced.\n" + result.errors.join("\n");
       } else {
-        triggerDownload(result, key);
+        triggerDownload(result);
         message.className = "message ok";
         const lines = [`Saved ${result.outputs.length} file(s).`];
         for (const o of result.outputs) lines.push("• " + o.name);
@@ -302,12 +426,12 @@ function renderRun(key) {
 // Pyodide invocation
 // ---------------------------------------------------------------------------
 
-async function runFormatter(key, files, months) {
+async function runFormatter(key, fieldFiles, params) {
   const cfg = FORMATTERS[key];
 
   // Reset working dirs
   pyodide.runPython(`
-import shutil, os
+import shutil
 from pathlib import Path
 for d in ['/work/in', '/work/out']:
     p = Path(d)
@@ -316,55 +440,59 @@ for d in ['/work/in', '/work/out']:
     p.mkdir(parents=True)
 `);
 
-  // Write uploaded files
-  for (const f of files) {
-    const buf = new Uint8Array(await f.arrayBuffer());
-    pyodide.FS.writeFile(`/work/in/${f.name}`, buf);
+  // Write uploaded files, grouped per field to avoid name collisions
+  const fsPaths = {};
+  for (const ff of cfg.fileFields) {
+    fsPaths[ff.key] = [];
+    pyodide.FS.mkdirTree(`/work/in/${ff.key}`);
+    for (const f of fieldFiles[ff.key]) {
+      const buf = new Uint8Array(await f.arrayBuffer());
+      const p = `/work/in/${ff.key}/${f.name}`;
+      pyodide.FS.writeFile(p, buf);
+      fsPaths[ff.key].push(p);
+    }
   }
 
-  // Build call
-  let pyCall;
-  if (cfg.months.length === 1) {
-    pyCall = `outputs, errors = ${cfg.module}.run_batch(file_paths, ${months[cfg.months[0].key]}, out_dir)`;
-  } else {
-    const a = months[cfg.months[0].key];
-    const b = months[cfg.months[1].key];
-    pyCall = `outputs, errors = ${cfg.module}.run_batch(file_paths, ${a}, ${b}, out_dir)`;
+  // Render python literals: file paths as JSON arrays (valid Python list of str),
+  // number params bare, text params JSON-quoted.
+  const f = {};
+  for (const k in fsPaths) f[k] = JSON.stringify(fsPaths[k]);
+  const p = {};
+  for (const pr of cfg.params) {
+    p[pr.key] = pr.type === "number" ? params[pr.key] : JSON.stringify(params[pr.key] ?? "");
   }
 
+  const body = cfg.pyInvoke(f, p);
   const code = `
 from pathlib import Path
 import ${cfg.module}
-in_dir = Path('/work/in')
 out_dir = Path('/work/out')
-file_paths = sorted(in_dir.iterdir())
-${pyCall}
-([str(p) for p in outputs], list(errors))
+${body}
+([str(x) for x in outputs], list(errors))
 `;
 
   const result = await pyodide.runPythonAsync(code);
   const [outPaths, errors] = result.toJs({ create_proxies: false });
   result.destroy();
 
-  const outputs = outPaths.map((p) => {
-    const bytes = pyodide.FS.readFile(p);
-    const name = p.split("/").pop();
-    return { name, bytes };
+  const mime = cfg.output === "xlsx" ? XLSX_MIME : "text/csv";
+  const outputs = outPaths.map((pp) => {
+    const bytes = pyodide.FS.readFile(pp);
+    const name = pp.split("/").pop();
+    return { name, bytes, type: mime };
   });
 
   return { outputs, errors };
 }
 
-function triggerDownload({ outputs, errors }, key) {
+function triggerDownload({ outputs, errors }) {
   if (outputs.length === 1 && errors.length === 0) {
     const o = outputs[0];
-    downloadBlob(new Blob([o.bytes], { type: "text/csv" }), o.name);
+    downloadBlob(new Blob([o.bytes], { type: o.type }), o.name);
     return;
   }
-  // Zip via JSZip-free hand-rolled? Easier: just download each. But user asked for clean UX.
-  // Use a simple bundle: trigger each download sequentially.
   outputs.forEach((o, i) => {
-    setTimeout(() => downloadBlob(new Blob([o.bytes], { type: "text/csv" }), o.name), i * 200);
+    setTimeout(() => downloadBlob(new Blob([o.bytes], { type: o.type }), o.name), i * 200);
   });
 }
 
