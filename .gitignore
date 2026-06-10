@@ -5,3 +5,5 @@ __pycache__/
 .settlement_split_prefs.json
 .all_transactions_prefs.json
 .customer_payments_prefs.json
+
+build/
