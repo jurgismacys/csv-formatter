@@ -5,7 +5,8 @@ Takes PayPal CSR CSV files where Date/Time are in the CSR time zone
 (e.g. America/Los_Angeles), converts them to Europe/Vilnius time and
 keeps only the rows that:
 
-  - have Description == "Express Checkout Payment", and
+  - are customer payments (Description is "Express Checkout Payment" or
+    "PreApproved Payment Bill User Payment"), and
   - fall into a user-chosen month (based on LT time).
 
 Features:
@@ -39,7 +40,15 @@ TIME_COL = "Time"
 TZ_COL = "Time Zone"
 DESC_COL = "Description"
 
-TARGET_DESCRIPTION = "Express Checkout Payment"
+# PayPal migrated the customer checkout to billing-agreement payments during
+# July 2026: the last "Express Checkout Payment" row is 2026-07-04 and the first
+# "PreApproved Payment Bill User Payment" row is 2026-07-26. Both are ordinary
+# customer orders (positive gross, invoice ID), so both count. Matching is done
+# on the stripped value so stray whitespace in an export cannot drop every row.
+TARGET_DESCRIPTIONS = {
+    "Express Checkout Payment",
+    "PreApproved Payment Bill User Payment",
+}
 
 LT_TZ = ZoneInfo("Europe/Vilnius")  # target timezone with DST rules
 
@@ -96,7 +105,7 @@ class Cleaner:
         # Filter to Express Checkout Payment only -------------------------
         if DESC_COL not in df.columns:
             raise ValueError(f"Column '{DESC_COL}' not found in CSR file.")
-        df = df[df[DESC_COL] == TARGET_DESCRIPTION]
+        df = df[df[DESC_COL].astype(str).str.strip().isin(TARGET_DESCRIPTIONS)]
         if df.empty:
             return df
 

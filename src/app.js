@@ -398,9 +398,18 @@ function renderRun(key) {
       await startPyodide();
       message.textContent = "Processing…";
       const result = await runFormatter(key, fieldFiles, params);
-      if (result.errors.length > 0 && result.outputs.length === 0) {
+      if (result.outputs.length === 0) {
+        // Never report success for an empty run: say so, and show what was in
+        // the input so the cause is visible instead of silently producing nothing.
         message.className = "message error";
-        message.textContent = "No output produced.\n" + result.errors.join("\n");
+        const lines = ["No output produced \u2014 0 rows matched."];
+        if (result.errors.length) lines.push(result.errors.join("\n"));
+        const seen = await describeInputs();
+        if (seen.length) {
+          lines.push("", "Description values found in the uploaded file(s):");
+          for (const s of seen) lines.push("\u2022 " + s);
+        }
+        message.textContent = lines.join("\n");
       } else {
         triggerDownload(result);
         message.className = "message ok";
@@ -483,6 +492,36 @@ ${body}
   });
 
   return { outputs, errors };
+}
+
+// Diagnostic for empty runs: list the distinct Description values present in the
+// uploaded CSVs. /work/in still holds them until the next run resets it.
+async function describeInputs() {
+  try {
+    const res = await pyodide.runPythonAsync(`
+import pandas as pd
+from pathlib import Path
+seen = {}
+for p in sorted(Path('/work/in').rglob('*')):
+    if not p.is_file() or p.suffix.lower() != '.csv':
+        continue
+    try:
+        d = pd.read_csv(p)
+    except Exception:
+        continue
+    if 'Description' not in d.columns:
+        continue
+    for k, v in d['Description'].astype(str).str.strip().value_counts().items():
+        seen[k] = seen.get(k, 0) + int(v)
+[f"{k} ({v})" for k, v in sorted(seen.items(), key=lambda kv: -kv[1])]
+`);
+    const out = res.toJs({ create_proxies: false });
+    res.destroy();
+    return out;
+  } catch (err) {
+    console.error(err);
+    return [];
+  }
 }
 
 function triggerDownload({ outputs, errors }) {
