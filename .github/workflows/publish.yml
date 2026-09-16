@@ -1,0 +1,62 @@
+name: Publish encrypted site
+
+# Rebuilds src/ into build/index.html, encrypts it with StatiCrypt using the
+# STATICRYPT_PASSWORD repository secret, and promotes the result to docs/,
+# which is what GitHub Pages serves. Nobody has to run the encrypt step by hand.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'build.py'
+      - '.staticrypt.json'
+      - '.github/workflows/publish.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Bundle src/ into build/index.html
+        run: python3 build.py
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Encrypt bundle with StatiCrypt
+        env:
+          STATICRYPT_PASSWORD: ${{ secrets.STATICRYPT_PASSWORD }}
+        run: |
+          if [ -z "$STATICRYPT_PASSWORD" ]; then
+            echo "::error::STATICRYPT_PASSWORD secret is not set (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+          rm -rf build/enc
+          npx --yes staticrypt@3.5.4 build/index.html -d build/enc \
+            --remember 30 --template-title "CSV Formatter — Locked"
+          # Fail loudly rather than promoting a stale or missing file.
+          test -s build/enc/index.html
+
+      - name: Promote to docs/ and commit
+        run: |
+          cp build/enc/index.html docs/index.html
+          if git diff --quiet -- docs/index.html; then
+            echo "docs/index.html unchanged — nothing to publish."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/index.html
+          git commit -m "Rebuild encrypted site [skip ci]"
+          git push
