@@ -2,13 +2,13 @@
 
 A small in-browser tool that runs four CSV-formatting scripts (PayPal + Airwallex) entirely client-side via Pyodide. No backend.
 
-**Live:** https://jurgismacys.github.io/csv-formatter/
+**Live (password-protected):** https://jurgismacys.github.io/csv-formatter/
 
-The site is **not** password-protected — anyone with the URL can open it. It was
-StatiCrypt-encrypted until 2026-09-16; the password was dropped so publishing could
-be fully automated. Nothing sensitive is served: all parsing happens in the visitor's
-own browser and no uploaded data is stored or transmitted. `.staticrypt.json` is kept
-only so the original salt is available if encryption is ever re-enabled.
+The published site is a single AES-256-encrypted page (via [StatiCrypt](https://github.com/robinmoisson/staticrypt)).
+Visitors enter the access password to decrypt and use it in the browser. The password is
+**not** in this repo — it lives in the `STATICRYPT_PASSWORD` GitHub Actions secret, and only
+CI ever sees it. `.staticrypt.json` holds the salt, so the password and remembered logins
+stay stable across rebuilds.
 
 ## What it does
 

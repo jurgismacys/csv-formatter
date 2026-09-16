@@ -1,7 +1,8 @@
-name: Publish site
+name: Publish encrypted site
 
-# Bundles src/ into a single self-contained page and promotes it to docs/,
-# which is what GitHub Pages serves. The site is NOT password-protected.
+# Rebuilds src/ into build/index.html, encrypts it with StatiCrypt using the
+# STATICRYPT_PASSWORD repository secret, and promotes the result to docs/,
+# which is what GitHub Pages serves. Nobody has to run the encrypt step by hand.
 
 on:
   push:
@@ -9,6 +10,7 @@ on:
     paths:
       - 'src/**'
       - 'build.py'
+      - '.staticrypt.json'
       - '.github/workflows/publish.yml'
   workflow_dispatch:
 
@@ -26,13 +28,29 @@ jobs:
           python-version: '3.12'
 
       - name: Bundle src/ into build/index.html
+        run: python3 build.py
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Encrypt bundle with StatiCrypt
+        env:
+          STATICRYPT_PASSWORD: ${{ secrets.STATICRYPT_PASSWORD }}
         run: |
-          python3 build.py
-          test -s build/index.html
+          if [ -z "$STATICRYPT_PASSWORD" ]; then
+            echo "::error::STATICRYPT_PASSWORD secret is not set (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+          rm -rf build/enc
+          npx --yes staticrypt@3.5.4 build/index.html -d build/enc \
+            --remember 30 --template-title "CSV Formatter — Locked"
+          # Fail loudly rather than promoting a stale or missing file.
+          test -s build/enc/index.html
 
       - name: Promote to docs/ and commit
         run: |
-          cp build/index.html docs/index.html
+          cp build/enc/index.html docs/index.html
           if git diff --quiet -- docs/index.html; then
             echo "docs/index.html unchanged — nothing to publish."
             exit 0
@@ -40,5 +58,5 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/index.html
-          git commit -m "Rebuild site [skip ci]"
+          git commit -m "Rebuild encrypted site [skip ci]"
           git push
