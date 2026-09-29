@@ -22,6 +22,7 @@ MODULE_FILES = [
     "paypal_all",
     "paypal_customer",
     "gisko_sales",
+    "truemed_report",
 ]
 
 # --- read source assets -----------------------------------------------------

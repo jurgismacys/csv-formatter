@@ -111,6 +111,37 @@ outputs = [out_path]
 errors = []
 `,
   },
+  "truemed-report": {
+    title: "Truemed — Report",
+    vendor: "truemed",
+    backHref: "#/",
+    description:
+      "Monthly Truemed report for the accountant, in Lithuania time. Matches Truemed charges to Shopify orders to convert Truemed's UTC dates to LT, then writes Operacijos / Suvestinė / Išmokos sheets with live formulas. The output report is in Lithuanian.",
+    module: "truemed_report",
+    output: "xlsx",
+    fileFields: [
+      {
+        key: "truemed",
+        label: "Truemed payments and refunds export (CSV)",
+        accept: ".csv",
+        multiple: false,
+        hint: "app.truemed.com → date-range export. Cover the full month plus ~1 week into the next, so late payout dates are included.",
+      },
+      {
+        key: "orders",
+        label: "Shopify Orders export for the month (CSV)",
+        accept: ".csv",
+        multiple: false,
+        hint: "Admin → Orders → Export → “Export orders”. Must be the COMPLETE month — an incomplete export silently misdates orders.",
+      },
+    ],
+    params: [],
+    pyInvoke: (f, p) => `
+out_path, warns = truemed_report.run(${f.truemed}[0], ${f.orders}[0], str(out_dir))
+outputs = [out_path]
+errors = list(warns)
+`,
+  },
 };
 
 const MODULE_FILES = [
@@ -119,6 +150,7 @@ const MODULE_FILES = [
   "paypal_all",
   "paypal_customer",
   "gisko_sales",
+  "truemed_report",
 ];
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -191,7 +223,7 @@ DatetimeProperties.strftime = _strftime_gnu
 import sys
 if '/scripts' not in sys.path:
     sys.path.insert(0, '/scripts')
-import airwallex_transactions, airwallex_frozen, paypal_all, paypal_customer, gisko_sales
+import airwallex_transactions, airwallex_frozen, paypal_all, paypal_customer, gisko_sales, truemed_report
 `);
 
   setStatus("Ready", "ready");
@@ -271,6 +303,10 @@ function renderHome() {
     el("a", { class: "card", href: "#/run/gisko-sales" },
       el("h2", {}, "Gisko sales report"),
       el("p", {}, "Shopify Orders + Transactions → formatted Excel"),
+    ),
+    el("a", { class: "card", href: "#/run/truemed-report" },
+      el("h2", {}, "Truemed report"),
+      el("p", {}, "Truemed + Shopify Orders → accountant Excel (LT time)"),
     ),
   );
   root.append(grid);
@@ -412,10 +448,13 @@ function renderRun(key) {
         message.textContent = lines.join("\n");
       } else {
         triggerDownload(result);
-        message.className = "message ok";
+        // A file came out, but warnings mean it may not be safe to send on.
+        message.className = result.errors.length ? "message warn" : "message ok";
         const lines = [`Saved ${result.outputs.length} file(s).`];
         for (const o of result.outputs) lines.push("• " + o.name);
-        if (result.errors.length) lines.push("\nWarnings:\n" + result.errors.join("\n"));
+        if (result.errors.length) {
+          lines.push("", "Check before sending this file:", ...result.errors.map((e) => "• " + e));
+        }
         message.textContent = lines.join("\n");
       }
     } catch (err) {

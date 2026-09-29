@@ -151,6 +151,11 @@ button:disabled { opacity: 0.55; cursor: not-allowed; }
   border: 1px solid rgba(124, 228, 164, 0.30);
   color: var(--ok);
 }
+.message.warn {
+  background: rgba(255, 196, 92, 0.08);
+  border: 1px solid rgba(255, 196, 92, 0.35);
+  color: #ffc45c;
+}
 .message.info {
   background: var(--panel);
   border: 1px solid var(--border);
