@@ -93,10 +93,16 @@ def load_truemed(path, sh, cover):
                     eff = dt = (date.fromisoformat(boundary) + timedelta(days=1)).isoformat()
                     note = (f"Truemed UTC data {boundary}; LT laiku {dt}, "
                             f"priskirta kitam mėnesiui")
-                elif r["Charge Date"][:7] <= cover:
+                elif r["Charge Date"][:7] == cover:
                     note = "PATIKRINTI: nerasta Shopify eksporte, data UTC"
                     warns.append(f"unmatched charge inside {cover}: "
                                  f"{r['Charge Date']} {r['Name']} {r['Order Total']}")
+                elif r["Charge Date"][:7] < cover:
+                    # Before the orders export's month: there is nothing to match
+                    # against, so this is not evidence of an incomplete export.
+                    # Being absent from a complete {cover} export also proves the
+                    # row is not a day-1-of-{cover} LT order, so the UTC month holds.
+                    note = "UTC data (ankstesnio mėnesio užsakymas, be tikslaus LT laiko)"
                 else:
                     note = "UTC data (kito mėnesio užsakymas, be tikslaus LT laiko)"
             rows.append({"dt": dt, "eff": eff, "men": eff[:7], "tipas": TYPE_LT[typ],
