@@ -45,6 +45,7 @@ HDR_FILL = PatternFill("solid", fgColor="1F5B33")
 BODY = Font(name="Arial", size=10)
 NOTE_F = Font(name="Arial", size=9, italic=True, color="7F7F7F")
 YEL = PatternFill("solid", fgColor="FFF2CC")
+GREY = PatternFill("solid", fgColor="EDEDED")
 AMT = "#,##0.00;[Red]-#,##0.00"
 
 
@@ -110,12 +111,20 @@ def load_truemed(path, sh, cover):
                          "suma": Decimal(r["Order Total"]),
                          "kom": Decimal(r["Fee"]) if r["Fee"] else Decimal(0),
                          "payd": r["Payout Date"], "payid": r["Payout ID"], "note": note})
+    # Rows outside the month being closed are kept ONLY so each Payout ID still
+    # sums to the real bank deposit (Truemed settles ~2 days after the charge, so
+    # end-of-month charges land in the next month's statement). They are marked
+    # here and greyed in the sheet so they can never be read as this month's figures.
+    for r in rows:
+        if r["men"] != cover:
+            tag = f"NE {cover} MEN. (palikta tik dėl išmokos sutapimo su banku)"
+            r["note"] = f"{tag}. {r['note']}" if r["note"] else tag
     rows.sort(key=lambda x: (x["eff"], x["dt"]))
     return rows, warns
 
 
-def write_workbook(rows, out_path):
-    months = sorted({r["men"] for r in rows})
+def write_workbook(rows, out_path, cover=None):
+    months = [cover] if cover else sorted({r["men"] for r in rows})
     wb = Workbook()
 
     # ---------- Operacijos ----------
@@ -123,7 +132,10 @@ def write_workbook(rows, out_path):
     ws.title = "Operacijos"
     ws["A1"] = "Guard Blinds — Truemed operacijų ataskaita (mokėjimai, komisiniai, grąžinimai)"
     ws["A1"].font = Font(name="Arial", bold=True, size=12)
-    ws["A2"] = (f"Laikotarpis: {rows[0]['eff']} iki {rows[-1]['eff']}. Datos Lietuvos laiku, "
+    ws["A2"] = ((f"Ataskaitinis mėnuo: {cover}. " if cover else "")
+                + f"Faile yra {rows[0]['eff']} iki {rows[-1]['eff']}. Pilkos eilutės NĖRA "
+                "ataskaitinio mėnesio operacijos - jos paliktos tik tam, kad kiekvienos išmokos "
+                "suma sutaptų su banko įplauka. Datos Lietuvos laiku, "
                 "konvertuotos iš Truemed UTC pagal Shopify apmokėjimo laiką. Eilutėse be Shopify "
                 "atitikmens palikta UTC data (žr. pastabą). Komisinis nurodytas prie kiekvienos "
                 "operacijos; grąžinimo atveju Truemed grąžina dalį komisinio (teigiama suma).")
@@ -146,6 +158,9 @@ def write_workbook(rows, out_path):
             c.font = BODY
             if col in (7, 8, 9):
                 c.number_format = AMT
+        if cover and r["men"] != cover:
+            for col in range(1, 13):
+                ws.cell(row=rn, column=col).fill = GREY
         if "priskirta kitam mėnesiui" in r["note"] or "PATIKRINTI" in r["note"]:
             for col in range(1, 13):
                 ws.cell(row=rn, column=col).fill = YEL
@@ -155,9 +170,10 @@ def write_workbook(rows, out_path):
 
     # ---------- Suvestinė ----------
     s = wb.create_sheet("Suvestinė")
-    s["A1"] = "Truemed suvestinė pagal mėnesį (LT laiku)"
+    s["A1"] = f"Truemed suvestinė, {cover} (LT laiku)" if cover else "Truemed suvestinė pagal mėnesį (LT laiku)"
     s["A1"].font = Font(name="Arial", bold=True, size=12)
-    s["A2"] = ("Sumos skaičiuojamos formulėmis iš lapo 'Operacijos'. Uždaryto mėnesio bruto turi "
+    s["A2"] = ("Rodomas tik ataskaitinis mėnuo; kitų mėnesių eilutės lape 'Operacijos' yra "
+               "pilkos ir į šią suvestinę neįtrauktos. Sumos skaičiuojamos formulėmis iš lapo 'Operacijos'. Uždaryto mėnesio bruto turi "
                "sutapti su Shopify 'Payments by type' ataskaitos Truemed eilute centas į centą. "
                "Išmokos per Stripe tiesiai į banko sąskaitą per ~2 d. d.; užšaldytų lėšų nėra.")
     s["A2"].font = NOTE_F
@@ -242,7 +258,7 @@ def run(truemed_csv, orders_csv, out_dir=".", out_path=None):
     if out_path is None:
         name = f"Truemed_ataskaita_{rows[0]['eff']}_iki_{rows[-1]['eff']}.xlsx"
         out_path = str(Path(out_dir) / name)
-    write_workbook(rows, out_path)
+    write_workbook(rows, out_path, cover)
     return out_path, warns
 
 
@@ -261,7 +277,7 @@ def main():
     if not rows:
         sys.exit("no rows in the Truemed CSV")
     out = a.out or f"Truemed_ataskaita_{rows[0]['eff']}_iki_{rows[-1]['eff']}.xlsx"
-    n_po = write_workbook(rows, out)
+    n_po = write_workbook(rows, out, cover)
     print(f"orders export covers {cover} | {len(rows)} transactions | {n_po} payouts -> {out}")
     for w in warns:
         print("WARNING", w)
