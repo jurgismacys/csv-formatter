@@ -38,8 +38,10 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
+# Named "Grąžinimas ..." on purpose: the Suvestinė formulas match "Grąžinimas*",
+# and a dispute is money going back to the customer like any other refund.
 TYPE_LT = {"Charge": "Mokėjimas", "Full Refund": "Grąžinimas (pilnas)",
-           "Partial Refund": "Grąžinimas (dalinis)"}
+           "Partial Refund": "Grąžinimas (dalinis)", "Dispute": "Grąžinimas (ginčas)"}
 HDR = Font(name="Arial", bold=True, size=10, color="FFFFFF")
 HDR_FILL = PatternFill("solid", fgColor="1F5B33")
 BODY = Font(name="Arial", size=10)
@@ -82,6 +84,14 @@ def load_truemed(path, sh, cover):
         for r in csv.DictReader(f):
             typ = r["Type"]
             ref = r["Shopify ID"]
+            # Never die on a type Truemed has not sent before: label it with the raw
+            # value and warn, so a new type shows up for review instead of crashing.
+            tipas = TYPE_LT.get(typ)
+            if tipas is None:
+                tipas = typ
+                warns.append(f"unknown Truemed Type '{typ}' ({r['Charge Date']} "
+                             f"{r['Name']} {r['Order Total']}) - left unlabelled, "
+                             f"check how it should be booked")
             note, order_no = "", sh.get(ref, ("", ""))[0]
             if typ == "Charge" and ref in sh:
                 dt = sh[ref][1]                       # exact LT timestamp
@@ -89,7 +99,8 @@ def load_truemed(path, sh, cover):
             else:
                 dt = eff = r["Charge Date"]           # UTC date only
                 if typ != "Charge":
-                    note = "Grąžinimo data UTC"
+                    note = ("Grąžinimo data UTC" if "Grąžinimas" in tipas
+                            else "Operacijos data UTC")
                 elif r["Charge Date"] == boundary:
                     eff = dt = (date.fromisoformat(boundary) + timedelta(days=1)).isoformat()
                     note = (f"Truemed UTC data {boundary}; LT laiku {dt}, "
@@ -106,7 +117,7 @@ def load_truemed(path, sh, cover):
                     note = "UTC data (ankstesnio mėnesio užsakymas, be tikslaus LT laiko)"
                 else:
                     note = "UTC data (kito mėnesio užsakymas, be tikslaus LT laiko)"
-            rows.append({"dt": dt, "eff": eff, "men": eff[:7], "tipas": TYPE_LT[typ],
+            rows.append({"dt": dt, "eff": eff, "men": eff[:7], "tipas": tipas,
                          "uzs": order_no, "pirk": r["Name"],
                          "suma": Decimal(r["Order Total"]),
                          "kom": Decimal(r["Fee"]) if r["Fee"] else Decimal(0),
